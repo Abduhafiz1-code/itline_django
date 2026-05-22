@@ -1,0 +1,38 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    # Teachers
+    path("teachers/", views.get_teachers),
+    path("teachers/create/", views.create_teacher),
+    path("teachers/delete/<int:teacher_id>/", views.delete_teacher),
+    path("teachers/update/<int:teacher_id>/", views.update_teacher),
+    path("teachers/reassign/", views.reassign_students),
+
+    # Stage prices
+    path("stage-prices/", views.get_stage_prices),
+    path("stage-prices/update/<int:stage>/", views.update_stage_price),
+
+    # Students
+    path("students/", views.get_students),
+    path("students/update/<int:student_id>/", views.update_student),  # ✅ yangi
+    path("register/", views.register_student),
+    path("login/", views.login_student),
+
+    # Lessons
+    path("lessons/", views.get_lessons),
+    path("lessons/create/", views.create_lesson),
+
+    # Attendance
+    path("attendance/<int:lesson_id>/", views.get_attendance),
+    path("attendance/update/<int:attendance_id>/", views.update_attendance),
+    path("student-attendance/<int:student_id>/", views.get_student_attendance),
+    path("monthly-absences/", views.get_monthly_absences),  # ✅ yangi
+
+    # Payments
+    path("payments/<int:student_id>/", views.get_payments),
+    path("payments/", views.get_all_payments),
+    path("payments/generate/", views.generate_payments),
+    path("payments/confirm/<int:payment_id>/", views.confirm_payment),
+    path("payments/update/<int:payment_id>/", views.update_payment_amount),
+]
