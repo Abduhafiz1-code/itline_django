@@ -5,15 +5,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import make_password, check_password
 
-from .models import Student, Teacher, Lesson, Attendance, Payment, StagePrice
+from .models import Student, Teacher, Lesson, Attendance, Payment, StagePrice, StudentPenalty
 
 ADMIN_PASSWORD = "excel2024"
 EXCELLENCE_PASSWORD = "excellence2024"
 
-# Kun → schedule mapping
-# 0=Dushanba,1=Seshanba,2=Chorshanba,3=Payshanba,4=Juma,5=Shanba,6=Yakshanba
-ODD_DAYS = {0, 2, 4}   # Du, Chor, Juma
-EVEN_DAYS = {1, 3, 5}  # Se, Pay, Shan
+ODD_DAYS = {0, 2, 4}
+EVEN_DAYS = {1, 3, 5}
 
 
 def get_stage_price(stage):
@@ -22,7 +20,6 @@ def get_stage_price(stage):
 
 
 def get_schedule_for_day(weekday):
-    """Berilgan weekday uchun qaysi schedule kelishi kerakligini qaytaradi."""
     if weekday in ODD_DAYS:
         return "odd"
     elif weekday in EVEN_DAYS:
@@ -35,7 +32,9 @@ def get_schedule_for_day(weekday):
 # ─────────────────────────────────────────
 
 def get_teachers(request):
-    teachers = list(Teacher.objects.all().values("id", "name", "phone", "is_senior"))
+    teachers = list(
+        Teacher.objects.all().values("id", "name", "phone", "is_senior", "penalty_limit")
+    )
     return JsonResponse(teachers, safe=False)
 
 
@@ -78,8 +77,26 @@ def update_teacher(request, teacher_id):
             teacher.phone = data["phone"]
         if "is_senior" in data:
             teacher.is_senior = data["is_senior"]
+        if "penalty_limit" in data:
+            teacher.penalty_limit = data["penalty_limit"]
         teacher.save()
         return JsonResponse({"message": "Yangilandi!"})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def update_teacher_penalty_limit(request, teacher_id):
+    if request.method != "PATCH":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        data = json.loads(request.body)
+        teacher = Teacher.objects.filter(id=teacher_id).first()
+        if not teacher:
+            return JsonResponse({"error": "Teacher topilmadi"}, status=404)
+        teacher.penalty_limit = data.get("penalty_limit", 0)
+        teacher.save()
+        return JsonResponse({"penalty_limit": teacher.penalty_limit})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -103,7 +120,9 @@ def reassign_students(request):
 # ─────────────────────────────────────────
 
 def get_stage_prices(request):
-    prices = list(StagePrice.objects.all().order_by("stage").values("id", "stage", "price"))
+    prices = list(
+        StagePrice.objects.all().order_by("stage").values("id", "stage", "price")
+    )
     return JsonResponse(prices, safe=False)
 
 
@@ -130,7 +149,9 @@ def update_stage_price(request, stage):
 
 def get_students(request):
     teacher_id = request.GET.get("teacher_id")
-    qs = Student.objects.select_related("teacher").filter(is_admin=False, is_excellence=False)
+    qs = Student.objects.select_related("teacher").filter(
+        is_admin=False, is_excellence=False
+    )
     if teacher_id and teacher_id != "null":
         try:
             qs = qs.filter(teacher_id=int(teacher_id))
@@ -154,7 +175,6 @@ def get_students(request):
 
 @csrf_exempt
 def update_student(request, student_id):
-    """stage va/yoki schedule yangilash."""
     if request.method != "PATCH":
         return JsonResponse({"error": "Method not allowed"}, status=405)
     try:
@@ -322,7 +342,6 @@ def create_lesson(request):
             date=lesson_date,
         )
 
-        # Faqat shu kunga mos schedule'dagi studentlar uchun attendance yaratish
         students_qs = teacher.students.filter(is_admin=False, is_excellence=False)
         if schedule_for_day:
             students_qs = students_qs.filter(schedule=schedule_for_day)
@@ -380,14 +399,14 @@ def update_attendance(request, attendance_id):
 
 def get_student_attendance(request, student_id):
     month = request.GET.get("month", "")
-    qs = Attendance.objects.filter(
-        student_id=student_id
-    ).select_related("lesson").order_by("lesson__date")
-
+    qs = (
+        Attendance.objects.filter(student_id=student_id)
+        .select_related("lesson")
+        .order_by("lesson__date")
+    )
     if month:
         year, mon = month.split("-")
         qs = qs.filter(lesson__date__year=year, lesson__date__month=mon)
-
     data = [
         {
             "id": a.id,
@@ -402,10 +421,6 @@ def get_student_attendance(request, student_id):
 
 
 def get_monthly_absences(request):
-    """
-    Barcha studentlar uchun joriy oy absent sonini qaytaradi.
-    GET /api/monthly-absences/?month=2025-05&teacher_id=1
-    """
     month = request.GET.get("month", datetime.now().strftime("%Y-%m"))
     teacher_id = request.GET.get("teacher_id", "")
 
@@ -425,6 +440,85 @@ def get_monthly_absences(request):
         result[student.id] = count
 
     return JsonResponse(result)
+
+
+# ─────────────────────────────────────────
+# STUDENT PENALTIES
+# ─────────────────────────────────────────
+
+def get_student_penalties(request, student_id):
+    penalties = StudentPenalty.objects.filter(student_id=student_id).order_by("-date")
+    data = [
+        {
+            "id": p.id,
+            "reason": p.reason,
+            "reason_display": p.get_reason_display(),
+            "description": p.description,
+            "amount": p.amount,
+            "date": str(p.date),
+            "given_by": p.given_by.name if p.given_by else "",
+        }
+        for p in penalties
+    ]
+    return JsonResponse(data, safe=False)
+
+
+def get_teacher_students_penalties(request, teacher_id):
+    """Teacher o'z studentlarining ja'zolarini ko'radi"""
+    penalties = StudentPenalty.objects.filter(
+        student__teacher_id=teacher_id
+    ).select_related("student").order_by("-date")
+    data = [
+        {
+            "id": p.id,
+            "student_id": p.student.id,
+            "student_name": f"{p.student.name} {p.student.surname}",
+            "reason": p.reason,
+            "reason_display": p.get_reason_display(),
+            "description": p.description,
+            "amount": p.amount,
+            "date": str(p.date),
+        }
+        for p in penalties
+    ]
+    return JsonResponse(data, safe=False)
+
+
+@csrf_exempt
+def create_student_penalty(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        data = json.loads(request.body)
+        student = Student.objects.filter(id=data.get("student_id")).first()
+        if not student:
+            return JsonResponse({"error": "Student topilmadi"}, status=404)
+
+        given_by = None
+        if data.get("teacher_id"):
+            given_by = Teacher.objects.filter(id=data["teacher_id"]).first()
+
+        penalty = StudentPenalty.objects.create(
+            student=student,
+            given_by=given_by,
+            reason=data.get("reason", "other"),
+            description=data.get("description", ""),
+            amount=data.get("amount", 0),
+        )
+        return JsonResponse({"id": penalty.id, "message": "Ja'zo qo'shildi"}, status=201)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def delete_student_penalty(request, penalty_id):
+    if request.method != "DELETE":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    penalty = StudentPenalty.objects.filter(id=penalty_id).first()
+    if not penalty:
+        return JsonResponse({"error": "Topilmadi"}, status=404)
+    penalty.delete()
+    return JsonResponse({"message": "O'chirildi!"})
 
 
 # ─────────────────────────────────────────
@@ -538,6 +632,9 @@ def update_payment_amount(request, payment_id):
         if "amount_due" in data:
             payment.amount_due = data["amount_due"]
         payment.save()
-        return JsonResponse({"message": "Summa yangilandi!", "amount_due": payment.amount_due})
+        return JsonResponse({
+            "message": "Summa yangilandi!",
+            "amount_due": payment.amount_due,
+        })
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)

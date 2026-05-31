@@ -5,6 +5,7 @@ class Teacher(models.Model):
     name = models.CharField(max_length=100)
     phone = models.CharField(max_length=20, blank=True)
     is_senior = models.BooleanField(default=False)
+    penalty_limit = models.IntegerField(default=0)  # 0 = limitsiz
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -13,8 +14,8 @@ class Teacher(models.Model):
 
 class Student(models.Model):
     SCHEDULE_CHOICES = [
-        ("odd", "Du-Chor-Juma"),      # Dushanba, Chorshanba, Juma
-        ("even", "Se-Pay-Shan"),      # Seshanba, Payshanba, Shanba
+        ("odd", "Du-Chor-Juma"),
+        ("even", "Se-Pay-Shan"),
     ]
 
     name = models.CharField(max_length=100)
@@ -42,6 +43,35 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.name} {self.surname}"
+
+
+class StudentPenalty(models.Model):
+    REASON_CHOICES = [
+        ("late", "Kech kelish"),
+        ("absent", "Darsga kelmadi"),
+        ("behavior", "Xulq-atvor"),
+        ("other", "Boshqa"),
+    ]
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="penalties",
+    )
+    given_by = models.ForeignKey(  # kim kiritdi
+        Teacher,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="given_penalties",
+    )
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES, default="other")
+    description = models.TextField(blank=True)
+    amount = models.IntegerField(default=0)
+    date = models.DateField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student} — {self.get_reason_display()} — {self.amount}"
 
 
 class StagePrice(models.Model):
