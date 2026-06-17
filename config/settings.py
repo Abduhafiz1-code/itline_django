@@ -11,13 +11,14 @@ SECRET_KEY = os.environ.get(
     "django-insecure-change-this-key"
 )
 
-DEBUG = False
+# Read DEBUG from environment for deploy flexibility
+DEBUG = os.environ.get("DEBUG", "False").lower() in ("1", "true", "yes")
 
-ALLOWED_HOSTS = [
-    "127.0.0.1",
-    "localhost",
-    ".onrender.com",   # Render uchun
-]
+# Allow hosts configurable via env var; keep render domain by default
+ALLOWED_HOSTS = os.environ.get(
+    "ALLOWED_HOSTS",
+    "127.0.0.1,localhost,.onrender.com",
+).split(",")
 
 
 # APPLICATIONS
@@ -78,12 +79,17 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 
 # DATABASE
+# Fallback to a local sqlite DB when DATABASE_URL is not provided
+sqlite_path = str(BASE_DIR / "db.sqlite3").replace("\\", "/")
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.environ.get("DATABASE_URL"),
+        default=f"sqlite:///{sqlite_path}",
         conn_max_age=600,
     )
 }
+
+# When behind a proxy (Render), honor X-Forwarded-Proto for secure URLs
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # PASSWORD VALIDATION
 AUTH_PASSWORD_VALIDATORS = [
