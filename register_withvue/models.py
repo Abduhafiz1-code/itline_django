@@ -265,3 +265,23 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.student} — {self.month} — {self.amount_due}"
+
+
+
+
+class Group(models.Model):
+    name = models.CharField(max_length=100)
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="groups"
+    )
+    students = models.ManyToManyField(
+        Student,
+        related_name="groups"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name

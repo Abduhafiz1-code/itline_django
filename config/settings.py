@@ -83,10 +83,12 @@ WSGI_APPLICATION = "config.wsgi.application"
 sqlite_path = str(BASE_DIR / "db.sqlite3").replace("\\", "/")
 DATABASES = {
     "default": dj_database_url.config(
-        default=f"sqlite:///{sqlite_path}",
+        default=os.environ.get("DATABASE_URL"),
         conn_max_age=600,
     )
 }
+
+
 
 # When behind a proxy (Render), honor X-Forwarded-Proto for secure URLs
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

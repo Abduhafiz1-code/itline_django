@@ -76,4 +76,14 @@ urlpatterns = [
     path("penalties/by-teacher/<int:teacher_id>/", views.get_teacher_students_penalties),
     path("penalties/create/", views.create_student_penalty),
     path("penalties/<int:penalty_id>/delete/", views.delete_student_penalty),
+
+    # ─────────────────────────────────────
+    # GROUPS
+    # ─────────────────────────────────────
+    # GROUPS
+path("groups/", views.get_groups),
+path("groups/<int:group_id>/", views.get_group),
+path("groups/create/", views.create_group),
+path("groups/update/<int:group_id>/", views.update_group),
+path("groups/delete/<int:group_id>/", views.delete_group),
 ]

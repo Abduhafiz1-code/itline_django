@@ -5,6 +5,10 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import models as db_models
+from .models import Group
+from .serializers import GroupSerializer
+
+
 
 from .models import (
     Student, Teacher, Lesson, Attendance, Payment,
@@ -980,3 +984,151 @@ def update_payment_amount(request, payment_id):
         })
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
+
+# ─────────────────────────────────────────
+# GROUPS
+# ─────────────────────────────────────────
+
+
+def get_groups(request):
+    groups = Group.objects.select_related(
+        "teacher"
+    ).prefetch_related(
+        "students"
+    )
+
+    serializer = GroupSerializer(groups, many=True)
+
+    return JsonResponse(serializer.data, safe=False)
+
+
+def get_group(request, group_id):
+    group = Group.objects.filter(id=group_id).first()
+
+    if not group:
+        return JsonResponse(
+            {"error": "Group topilmadi"},
+            status=404
+        )
+
+    serializer = GroupSerializer(group)
+
+    return JsonResponse(serializer.data, safe=False)
+
+
+@csrf_exempt
+def create_group(request):
+    if request.method != "POST":
+        return JsonResponse(
+            {"error": "Method not allowed"},
+            status=405
+        )
+
+    try:
+        data = json.loads(request.body)
+
+        teacher = None
+
+        if data.get("teacher_id"):
+            teacher = Teacher.objects.filter(
+                id=data.get("teacher_id")
+            ).first()
+
+        group = Group.objects.create(
+            name=data.get("name"),
+            teacher=teacher,
+        )
+
+        student_ids = data.get("students", [])
+
+        if student_ids:
+            group.students.set(student_ids)
+
+        serializer = GroupSerializer(group)
+
+        return JsonResponse(
+            serializer.data,
+            status=201
+        )
+
+    except Exception as e:
+        return JsonResponse(
+            {"error": str(e)},
+            status=400
+        )
+
+
+@csrf_exempt
+def update_group(request, group_id):
+    if request.method != "PATCH":
+        return JsonResponse(
+            {"error": "Method not allowed"},
+            status=405
+        )
+
+    try:
+        data = json.loads(request.body)
+
+        group = Group.objects.filter(
+            id=group_id
+        ).first()
+
+        if not group:
+            return JsonResponse(
+                {"error": "Group topilmadi"},
+                status=404
+            )
+
+        if "name" in data:
+            group.name = data["name"]
+
+        if "teacher_id" in data:
+            group.teacher = Teacher.objects.filter(
+                id=data["teacher_id"]
+            ).first()
+
+        group.save()
+
+        if "students" in data:
+            group.students.set(
+                data["students"]
+            )
+
+        serializer = GroupSerializer(group)
+
+        return JsonResponse(
+            serializer.data,
+            safe=False
+        )
+
+    except Exception as e:
+        return JsonResponse(
+            {"error": str(e)},
+            status=400
+        )
+
+
+@csrf_exempt
+def delete_group(request, group_id):
+    if request.method != "DELETE":
+        return JsonResponse(
+            {"error": "Method not allowed"},
+            status=405
+        )
+
+    group = Group.objects.filter(
+        id=group_id
+    ).first()
+
+    if not group:
+        return JsonResponse(
+            {"error": "Group topilmadi"},
+            status=404
+        )
+
+    group.delete()
+
+    return JsonResponse({
+        "message": "Group o'chirildi!"
+    })

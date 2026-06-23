@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Manager, Student, Teacher, StagePrice,
-    Lesson, Attendance, Payment, StudentPenalty, CoinTransaction
+    Lesson, Attendance, Payment, StudentPenalty, CoinTransaction, Group
 )
 
 
@@ -73,3 +73,17 @@ class StudentPenaltyAdmin(admin.ModelAdmin):
     list_display = ("id", "student", "reason", "amount", "given_by", "date")
     list_filter = ("reason",)
     search_fields = ("student__name",)
+
+
+@admin.register(Group)
+class GroupAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "teacher", "created_at", "students_count")
+    search_fields = ("name", "teacher__name")
+    ordering = ("name",)
+
+    def teacher(self, obj):
+        return obj.teacher
+
+    def students_count(self, obj):
+        return obj.students.count()
+    students_count.short_description = "Studentlar soni"
